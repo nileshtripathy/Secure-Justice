@@ -34,10 +34,22 @@ const Home = () => (
       <div className="absolute bottom-1/4 right-1/6 w-[250px] h-[250px] bg-purple-600/15 rounded-full blur-[90px] pointer-events-none" />
 
       <div className="relative z-10 max-w-5xl mx-auto">
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-primary-500/30 bg-primary-500/10 text-primary-400 font-medium text-sm mb-6 backdrop-blur-md">
-          <ShieldCheck className="h-4 w-4" />
-          <span>Next-Generation Digital Justice System</span>
-        </div>
+        <button 
+          onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
+          className="group relative inline-flex items-center justify-center mb-8"
+        >
+          <div className="absolute inset-0 bg-gradient-to-r from-primary-500 via-purple-500 to-blue-500 rounded-full blur opacity-30 group-hover:opacity-70 transition duration-500"></div>
+          <div className="relative flex items-center gap-3 px-6 py-2 bg-gray-900/90 border border-white/10 rounded-full backdrop-blur-xl leading-none">
+            <span className="flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-2.5 w-2.5 rounded-full bg-primary-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]"></span>
+            </span>
+            <span className="text-sm font-semibold text-gray-300 group-hover:text-white transition-colors">
+              Pioneering <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-400 to-purple-400">Digital Justice</span> Solutions
+            </span>
+            <ArrowRight className="h-4 w-4 text-gray-500 group-hover:text-primary-400 group-hover:translate-x-1 transition-all duration-300 ml-1" />
+          </div>
+        </button>
         <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-white leading-tight mb-6">
           Transforming the{' '}
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-400 via-blue-400 to-purple-500">

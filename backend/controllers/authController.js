@@ -43,6 +43,11 @@ exports.sendOTP = async (req, res) => {
     await OTP.deleteMany({ email });
 
     const otp = generateOTP();
+    
+    let idCardPath = '';
+    if (req.file) {
+      idCardPath = req.file.path.replace(/\\/g, '/');
+    }
 
     await OTP.create({
       email,
@@ -50,6 +55,7 @@ exports.sendOTP = async (req, res) => {
       name,
       password: hashedPassword,
       role: role || 'citizen',
+      idCardPath
     });
 
     // ── Check if email credentials are configured ──────────────────────────────
@@ -131,6 +137,7 @@ exports.verifyOTPAndRegister = async (req, res) => {
       email: record.email,
       password: record.password,
       role: record.role,
+      idCardPath: record.idCardPath || '',
     });
 
     // Clean up OTP record

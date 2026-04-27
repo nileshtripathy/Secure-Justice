@@ -113,6 +113,7 @@ const Register = () => {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('citizen');
   const [showPassword, setShowPassword] = useState(false);
+  const [idCardFile, setIdCardFile] = useState(null);
 
   // Step 2 fields
   const [otp, setOtp] = useState('');
@@ -140,10 +141,23 @@ const Register = () => {
   /* ── Step 1: send OTP ─────────────────────────────────────────────────────── */
   const handleSendOTP = async (e) => {
     e.preventDefault();
+    if (['police', 'forensic', 'lawyer'].includes(role) && !idCardFile) {
+      setError('Please upload your ID Card / Badge.');
+      return;
+    }
     setError('');
     setLoading(true);
     try {
-      const res = await api.post('/auth/send-otp', { name, email, password, role });
+      const formData = new FormData();
+      formData.append('name', name);
+      formData.append('email', email);
+      formData.append('password', password);
+      formData.append('role', role);
+      if (['police', 'forensic', 'lawyer'].includes(role) && idCardFile) {
+        formData.append('idCard', idCardFile);
+      }
+
+      const res = await api.post('/auth/send-otp', formData);
       if (res.data.devMode) {
         setSuccessMsg('⚙️ Dev Mode: OTP printed to the backend console (terminal). Enter it below.');
       } else {
@@ -183,7 +197,16 @@ const Register = () => {
     setOtp('');
     setLoading(true);
     try {
-      await api.post('/auth/send-otp', { name, email, password, role });
+      const formData = new FormData();
+      formData.append('name', name);
+      formData.append('email', email);
+      formData.append('password', password);
+      formData.append('role', role);
+      if (['police', 'forensic', 'lawyer'].includes(role) && idCardFile) {
+        formData.append('idCard', idCardFile);
+      }
+
+      await api.post('/auth/send-otp', formData);
       setSuccessMsg('New OTP sent! Check your email.');
       restart();
     } catch (err) {
@@ -274,6 +297,19 @@ const Register = () => {
           <option value="lawyer">Lawyer</option>
           <option value="admin">Admin</option>
         </select>
+
+        {['police', 'forensic', 'lawyer'].includes(role) && (
+          <div className="space-y-1">
+            <label className="block text-sm text-gray-300 font-medium">Upload ID Card / Badge (Required)</label>
+            <input 
+              type="file" 
+              accept="image/*,.pdf"
+              onChange={(e) => setIdCardFile(e.target.files[0])}
+              className="appearance-none rounded-lg w-full px-3 py-2 border border-gray-700 bg-gray-800/50 text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary-900 file:text-primary-300 hover:file:bg-primary-800 transition-all focus:outline-none focus:ring-2 focus:ring-primary-500"
+              required
+            />
+          </div>
+        )}
       </div>
 
       <button

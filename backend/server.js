@@ -27,6 +27,11 @@ if (!fs.existsSync('./uploads')){
 }
 app.use('/uploads', express.static('uploads'));
 
+// Root route
+app.get('/', (req, res) => {
+  res.json({ message: 'Secure Justice Backend API', version: '1.0.0' });
+});
+
 // Mount routers
 app.use('/api/auth', authRoutes);
 app.use('/api/fir', firRoutes);

@@ -1,5 +1,17 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/');
+  },
+  filename: function (req, file, cb) {
+    cb(null, 'idcard-' + Date.now() + '-' + file.originalname);
+  }
+});
+const upload = multer({ storage: storage });
+
 const {
   sendOTP,
   verifyOTPAndRegister,
@@ -10,7 +22,7 @@ const {
 } = require('../controllers/authController');
 const { protect } = require('../middleware/authMiddleware');
 
-router.post('/send-otp', sendOTP);
+router.post('/send-otp', upload.single('idCard'), sendOTP);
 router.post('/verify-otp', verifyOTPAndRegister);
 router.post('/login', authUser);
 router.get('/profile', protect, getUserProfile);
