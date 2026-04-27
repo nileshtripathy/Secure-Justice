@@ -9,6 +9,7 @@ const userSchema = new mongoose.Schema({
     enum: ['citizen', 'police', 'forensic', 'lawyer', 'victim', 'defendant', 'judge', 'admin'],
     default: 'citizen' 
   },
+  idCardPath: { type: String }, // path to uploaded ID card for specific roles
   createdAt: { type: Date, default: Date.now }
 });
 
