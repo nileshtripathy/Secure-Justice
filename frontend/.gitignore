@@ -1,0 +1,15 @@
+# Ignore backend
+backend/
+
+# Ignore node modules everywhere
+node_modules/
+
+# Ignore frontend build + modules
+frontend/node_modules/
+frontend/dist/
+
+# Ignore vscode
+.vscode/
+
+# Logs
+*.log
