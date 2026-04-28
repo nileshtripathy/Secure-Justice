@@ -47,9 +47,9 @@ const Profile = () => {
             <div className="mx-auto w-20 h-20 rounded-full bg-primary-900/50 border-2 border-primary-500/30 flex items-center justify-center">
               <User className="h-10 w-10 text-primary-400" />
             </div>
-            <div>
-              <h2 className="text-xl font-bold text-white">{user.name}</h2>
-              <p className="text-gray-400 text-sm">{user.email}</p>
+            <div className="px-2">
+              <h2 className="text-xl font-bold text-white truncate">{user.name}</h2>
+              <p className="text-gray-400 text-sm break-all">{user.email}</p>
             </div>
             <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-semibold border ${rc.bg} ${rc.border} ${rc.text}`}>
               <Shield className="h-4 w-4" />
@@ -131,10 +131,10 @@ const Profile = () => {
                 <span className="text-gray-400 w-24">Full Name</span>
                 <span className="text-white font-medium">{user.name}</span>
               </div>
-              <div className="flex items-center gap-3 text-sm">
-                <Mail className="h-4 w-4 text-gray-500 shrink-0" />
-                <span className="text-gray-400 w-24">Email</span>
-                <span className="text-white font-medium">{user.email}</span>
+              <div className="flex items-start gap-3 text-sm">
+                <Mail className="h-4 w-4 text-gray-500 shrink-0 mt-0.5" />
+                <span className="text-gray-400 w-24 shrink-0">Email</span>
+                <span className="text-white font-medium break-all">{user.email}</span>
               </div>
               <div className="flex items-center gap-3 text-sm">
                 <Shield className="h-4 w-4 text-gray-500 shrink-0" />

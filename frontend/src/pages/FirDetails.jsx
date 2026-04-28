@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import { useSocket } from '../context/SocketContext';
 import api from '../api/axios';
 import { Shield, FileText, Clock, CheckCircle, Upload, ArrowLeft, ShieldAlert, Printer, Copy, Hash, MessageSquare, Send, Gavel, EyeOff } from 'lucide-react';
 
@@ -8,6 +9,7 @@ const FirDetails = () => {
   const { id } = useParams();
   const { user } = useContext(AuthContext);
   const navigate = useNavigate();
+  const socket = useSocket();
   
   const [fir, setFir] = useState(null);
   const [evidence, setEvidence] = useState([]);
@@ -18,6 +20,8 @@ const FirDetails = () => {
   const [uploading, setUploading] = useState(false);
   
   const [newStatus, setNewStatus] = useState('');
+  const [statusError, setStatusError] = useState('');
+  const [uploadError, setUploadError] = useState('');
   
   const [verificationResult, setVerificationResult] = useState(null);
   const [logs, setLogs] = useState([]);
@@ -81,10 +85,33 @@ const FirDetails = () => {
     fetchData();
   }, [id]);
 
+  useEffect(() => {
+    if (socket && id) {
+      socket.emit('join-fir', id);
+
+      const handleNewMessage = (msg) => {
+        setMessages((prev) => [...prev, msg]);
+      };
+
+      const handleNewEvidence = (ev) => {
+        setEvidence((prev) => [...prev, ev]);
+      };
+
+      socket.on('new-message', handleNewMessage);
+      socket.on('new-evidence', handleNewEvidence);
+
+      return () => {
+        socket.off('new-message', handleNewMessage);
+        socket.off('new-evidence', handleNewEvidence);
+      };
+    }
+  }, [socket, id]);
+
   const handleUpload = async (e) => {
     e.preventDefault();
     if (!file) return;
     
+    setUploadError('');
     setUploading(true);
     const formData = new FormData();
     formData.append('file', file);
@@ -101,6 +128,7 @@ const FirDetails = () => {
       setDescription('');
       fetchData();
     } catch (err) {
+      setUploadError(err?.response?.data?.message || 'Failed to upload evidence.');
       console.error(err);
     } finally {
       setUploading(false);
@@ -108,10 +136,12 @@ const FirDetails = () => {
   };
 
   const handleStatusUpdate = async () => {
+    setStatusError('');
     try {
       await api.put(`/fir/${id}`, { status: newStatus });
       fetchData();
     } catch (err) {
+      setStatusError(err?.response?.data?.message || 'Failed to update status.');
       console.error(err);
     }
   };
@@ -346,6 +376,7 @@ const FirDetails = () => {
                 <option value="legal_review">Legal Review</option>
                 <option value="closed">Closed</option>
               </select>
+              {statusError && <div className="text-red-400 text-sm mb-3 text-center">{statusError}</div>}
               <button 
                 onClick={handleStatusUpdate}
                 disabled={newStatus === fir.status}
@@ -378,6 +409,7 @@ const FirDetails = () => {
                     className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary-600 file:text-white hover:file:bg-primary-700 cursor-pointer"
                   />
                 </div>
+                {uploadError && <div className="text-red-400 text-sm mb-2 text-center">{uploadError}</div>}
                 <button 
                   type="submit" disabled={uploading || !file}
                   className="w-full bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2 rounded-lg font-medium transition-colors mt-2"

@@ -1,6 +1,8 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { SocketProvider } from './context/SocketContext';
+import { Toaster } from 'react-hot-toast';
 import Navbar from './components/Navbar';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -341,12 +343,15 @@ const AppRoutes = () => {
 function App() {
   return (
     <AuthProvider>
-      <Router>
-        <div className="min-h-screen bg-dark-900">
-          <Navbar />
-          <AppRoutes />
-        </div>
-      </Router>
+      <SocketProvider>
+        <Router>
+          <div className="min-h-screen bg-dark-900">
+            <Toaster position="top-right" />
+            <Navbar />
+            <AppRoutes />
+          </div>
+        </Router>
+      </SocketProvider>
     </AuthProvider>
   );
 }

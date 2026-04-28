@@ -12,6 +12,7 @@ const Dashboard = () => {
   const [crimeType, setCrimeType] = useState('Theft');
   const [location, setLocation] = useState('');
   const [isAnonymous, setIsAnonymous] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   
   // New State for Search & Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -60,6 +61,7 @@ const Dashboard = () => {
 
   const handleSubmitFir = async (e) => {
     e.preventDefault();
+    setSubmitError('');
     try {
       const res = await api.post('/fir', { complaintText, crimeType, location, isAnonymous });
       setShowFirModal(false);
@@ -69,6 +71,7 @@ const Dashboard = () => {
       setNewCaseNumber(res.data.caseNumber || '');
       fetchFirs();
     } catch (err) {
+      setSubmitError(err?.response?.data?.message || 'Failed to submit FIR. Please try again.');
       console.error(err);
     }
   };
@@ -242,7 +245,7 @@ const Dashboard = () => {
                 {((['admin','police'].includes(user?.role)) ||
                   (user?.role === 'citizen' && fir.status === 'pending')) && (
                   <button
-                    onClick={e => { e.preventDefault(); setDeleteError(''); setDeletingId(fir._id); }}
+                    onClick={e => { e.preventDefault(); e.stopPropagation(); setDeleteError(''); setDeletingId(fir._id); }}
                     className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-900/20 transition-colors"
                     title="Delete case"
                   >
@@ -260,6 +263,7 @@ const Dashboard = () => {
           <div className="glass-panel w-full max-w-lg p-6 rounded-2xl">
             <h2 className="text-xl font-bold text-white mb-4">File a new FIR</h2>
             <form onSubmit={handleSubmitFir} className="space-y-4">
+               {submitError && <div className="p-3 bg-red-900/30 border border-red-500/50 rounded-lg text-red-200 text-sm text-center">{submitError}</div>}
                <div>
                   <label className="block text-sm font-medium text-gray-300 mb-1">Crime Type</label>
                   <select 
