@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Shield, Mail, Lock, Eye, EyeOff, ArrowLeft, CheckCircle, KeyRound } from 'lucide-react';
-import axios from 'axios';
+import api from '../api/axios';
 
 const STEPS = { EMAIL: 'email', RESET: 'reset', DONE: 'done' };
 
@@ -23,7 +23,7 @@ const ForgotPassword = () => {
     setError('');
     setLoading(true);
     try {
-      await axios.post('http://localhost:5000/api/auth/forgot-password/verify-email', { email });
+      await api.post('/auth/forgot-password/verify-email', { email });
       setStep(STEPS.RESET);
     } catch (err) {
       setError(err.response?.data?.message || 'Email not found. Please check and try again.');
@@ -46,7 +46,7 @@ const ForgotPassword = () => {
 
     setLoading(true);
     try {
-      await axios.post('http://localhost:5000/api/auth/reset-password', { email, newPassword });
+      await api.post('/auth/reset-password', { email, newPassword });
       setStep(STEPS.DONE);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to reset password. Please try again.');

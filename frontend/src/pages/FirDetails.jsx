@@ -317,7 +317,7 @@ const FirDetails = () => {
                       <p className="text-xs text-gray-500 font-mono truncate w-full max-w-xs sm:max-w-md">Hash: {ev.fileHash}</p>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
-                      <a href={`http://localhost:5000${ev.fileUrl}`} target="_blank" rel="noopener noreferrer" className="text-sm bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded transition-colors">
+                      <a href={`${api.defaults.baseURL.replace('/api', '')}${ev.fileUrl}`} target="_blank" rel="noopener noreferrer" className="text-sm bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded transition-colors">
                         View File
                       </a>
                       {['forensic', 'judge', 'police', 'admin'].includes(user?.role) && (

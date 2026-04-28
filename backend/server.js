@@ -4,6 +4,8 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const fs = require('fs');
 const http = require('http');
+const helmet = require('helmet');
+const morgan = require('morgan');
 const { Server } = require('socket.io');
 
 // Load env vars
@@ -23,7 +25,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: '*',
+    origin: process.env.FRONTEND_URL || '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
   }
 });
@@ -48,8 +50,33 @@ io.on('connection', (socket) => {
 });
 
 // Middleware
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
+app.use(morgan('dev'));
 app.use(express.json());
-app.use(cors());
+
+// CORS configuration
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'http://localhost:5173',
+  /\.vercel\.app$/ // Allow all Vercel preview/production URLs
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.some(allowed => 
+      allowed instanceof RegExp ? allowed.test(origin) : allowed === origin
+    )) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
 
 // Static folder for evidence uploads
 if (!fs.existsSync('./uploads')){
@@ -59,7 +86,12 @@ app.use('/uploads', express.static('uploads'));
 
 // Root route
 app.get('/', (req, res) => {
-  res.json({ message: 'Secure Justice Backend API', version: '1.0.0' });
+  res.json({ message: 'Secure Justice Backend API', status: 'running', version: '1.0.0' });
+});
+
+// Health check for Render
+app.get('/health', (req, res) => {
+  res.status(200).send('OK');
 });
 
 // Mount routers
@@ -69,6 +101,15 @@ app.use('/api/evidence', evidenceRoutes);
 app.use('/api/caselogs', caseLogRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/notifications', notificationRoutes);
+
+// Serve frontend in production
+const path = require('path');
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../frontend/dist')));
+  app.get('*', (req, res) => {
+    res.sendFile(path.resolve(__dirname, '../frontend', 'dist', 'index.html'));
+  });
+}
 
 // Database connection
 const PORT = process.env.PORT || 5000;
