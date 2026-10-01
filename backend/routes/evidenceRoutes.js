@@ -1,21 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const multer = require('multer');
-const { uploadEvidence, getEvidenceByFIR, verifyEvidence } = require('../controllers/evidenceController');
+const { evidenceUpload } = require('../middleware/upload');
+const { uploadEvidence, getEvidenceByFIR, downloadEvidence, verifyEvidence } = require('../controllers/evidenceController');
 const { protect, authorize } = require('../middleware/authMiddleware');
+const { EVIDENCE_UPLOAD_ROLES, EVIDENCE_VERIFY_ROLES } = require('../config/constants');
 
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'uploads/')
-  },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + '-' + file.originalname)
-  }
-})
-const upload = multer({ storage: storage })
-
-router.post('/upload', protect, upload.single('file'), uploadEvidence);
+router.post('/upload', protect, authorize(...EVIDENCE_UPLOAD_ROLES), evidenceUpload.single('file'), uploadEvidence);
 router.get('/fir/:firId', protect, getEvidenceByFIR);
-router.get('/verify/:id', protect, authorize('forensic', 'judge', 'police'), verifyEvidence);
+router.get('/file/:id', protect, downloadEvidence);
+router.get('/verify/:id', protect, authorize(...EVIDENCE_VERIFY_ROLES), verifyEvidence);
 
 module.exports = router;

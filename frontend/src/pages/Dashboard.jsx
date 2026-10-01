@@ -3,6 +3,8 @@ import { AuthContext } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
 import { FileText, Upload, Activity, ShieldAlert, CheckCircle, Clock, Search, Filter, BarChart2, AlertCircle, Copy, Hash, EyeOff, Trash2 } from 'lucide-react';
 import api from '../api/axios';
+import PendingApprovals from '../components/PendingApprovals';
+import { STATUS_META, statusPill, statusLabel, CRIME_TYPES } from '../constants/status';
 
 const Dashboard = () => {
   const { user } = useContext(AuthContext);
@@ -52,9 +54,11 @@ const Dashboard = () => {
   }, [user]);
 
   const filteredFirs = firs.filter(fir => {
-    const matchesSearch = fir.complaintText.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          fir.location.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = filterStatus === 'All' || fir.status === filterStatus.toLowerCase();
+    const q = searchQuery.toLowerCase();
+    const matchesSearch = (fir.complaintText || '').toLowerCase().includes(q) ||
+                          (fir.location || '').toLowerCase().includes(q) ||
+                          (fir.caseNumber || '').toLowerCase().includes(q);
+    const matchesStatus = filterStatus === 'All' || fir.status === filterStatus;
     const matchesType = filterType === 'All' || fir.crimeType === filterType;
     return matchesSearch && matchesStatus && matchesType;
   });
@@ -70,6 +74,7 @@ const Dashboard = () => {
       setIsAnonymous(false);
       setNewCaseNumber(res.data.caseNumber || '');
       fetchFirs();
+      fetchAnalytics();
     } catch (err) {
       setSubmitError(err?.response?.data?.message || 'Failed to submit FIR. Please try again.');
       console.error(err);
@@ -82,6 +87,7 @@ const Dashboard = () => {
       await api.delete(`/fir/${firId}`);
       setDeletingId(null);
       fetchFirs();
+      fetchAnalytics();
     } catch (err) {
       setDeleteError(err?.response?.data?.message || 'Failed to delete. Please try again.');
     }
@@ -124,6 +130,8 @@ const Dashboard = () => {
           </button>
         </div>
       )}
+
+      {user.role === 'admin' && <PendingApprovals />}
 
       {/* Analytics Section for Police/Admin */}
       {analytics && (
@@ -173,7 +181,7 @@ const Dashboard = () => {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" />
           <input 
             type="text" 
-            placeholder="Search by details or location..." 
+            placeholder="Search by case number, details or location..." 
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-gray-800/50 border border-gray-700/50 text-white rounded-lg focus:outline-none focus:border-primary-500 transition-colors"
@@ -186,10 +194,9 @@ const Dashboard = () => {
             className="bg-gray-800/50 border border-gray-700/50 text-white px-4 py-2 rounded-lg focus:outline-none focus:border-primary-500"
           >
             <option value="All">All Status</option>
-            <option value="Pending">Pending</option>
-            <option value="Verified">Verified</option>
-            <option value="Investigating">Investigating</option>
-            <option value="Closed">Closed</option>
+            {Object.entries(STATUS_META).map(([value, { label }]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
           </select>
           <select 
             value={filterType} 
@@ -197,11 +204,7 @@ const Dashboard = () => {
             className="bg-gray-800/50 border border-gray-700/50 text-white px-4 py-2 rounded-lg focus:outline-none focus:border-primary-500"
           >
             <option value="All">All Types</option>
-            <option value="Theft">Theft</option>
-            <option value="Cybercrime">Cybercrime</option>
-            <option value="Fraud">Fraud</option>
-            <option value="Violence">Violence</option>
-            <option value="Other">Other</option>
+            {CRIME_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
       </div>
@@ -232,17 +235,12 @@ const Dashboard = () => {
                 <p className="text-sm text-gray-400">📍 {fir.location}</p>
               </div>
               <div className="flex items-center gap-3 mt-4 sm:mt-0">
-                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${
-                  fir.status === 'pending' ? 'bg-yellow-900/30 text-yellow-500 border border-yellow-500/30' :
-                  fir.status === 'verified' ? 'bg-blue-900/30 text-blue-500 border border-blue-500/30' :
-                  fir.status === 'investigating' ? 'bg-purple-900/30 text-purple-500 border border-purple-500/30' :
-                  'bg-green-900/30 text-green-500 border border-green-500/30'
-                }`}>
+                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${statusPill(fir.status)}`}>
                   {fir.status === 'pending' ? <Clock className="h-3 w-3" /> : <CheckCircle className="h-3 w-3"/>}
-                  <span className="capitalize">{fir.status}</span>
+                  <span>{statusLabel(fir.status)}</span>
                 </div>
-                {/* Delete button — only for pending own cases (citizen) or admin/police */}
-                {((['admin','police'].includes(user?.role)) ||
+                {/* Delete: admin any case; citizen only their own case while still pending */}
+                {(user?.role === 'admin' ||
                   (user?.role === 'citizen' && fir.status === 'pending')) && (
                   <button
                     onClick={e => { e.preventDefault(); e.stopPropagation(); setDeleteError(''); setDeletingId(fir._id); }}
@@ -270,11 +268,7 @@ const Dashboard = () => {
                     value={crimeType} onChange={e => setCrimeType(e.target.value)}
                     className="w-full bg-gray-800/50 border border-gray-700 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-primary-500"
                   >
-                    <option>Theft</option>
-                    <option>Cybercrime</option>
-                    <option>Fraud</option>
-                    <option>Violence</option>
-                    <option>Other</option>
+                    {CRIME_TYPES.map((t) => <option key={t}>{t}</option>)}
                   </select>
                </div>
                <div>
@@ -306,7 +300,7 @@ const Dashboard = () => {
                  <EyeOff className="h-5 w-5" />
                  <div className="text-left">
                    <span className="font-medium text-sm block">{isAnonymous ? 'Anonymous Mode ON' : 'File Anonymously'}</span>
-                   <span className="text-xs opacity-70">Hides your identity from police. For whistleblowers and sensitive cases.</span>
+                   <span className="text-xs opacity-70">Your name is hidden from police and other staff. Only you and admins can see it.</span>
                  </div>
                  <div className={`ml-auto w-10 h-6 rounded-full transition-colors flex items-center px-1 ${isAnonymous ? 'bg-purple-600' : 'bg-gray-700'}`}>
                    <div className={`w-4 h-4 rounded-full bg-white transition-transform ${isAnonymous ? 'translate-x-4' : ''}`} />
@@ -330,7 +324,7 @@ const Dashboard = () => {
             </div>
             <h2 className="text-xl font-bold text-white text-center mb-2">Delete this case?</h2>
             <p className="text-gray-400 text-sm text-center mb-4">
-              This action is permanent and cannot be undone. All associated logs will also be removed.
+              This permanently removes the case, its evidence and messages. The audit log keeps a record that it was deleted.
             </p>
             {deleteError && (
               <div className="bg-red-900/30 border border-red-500/30 text-red-300 text-sm rounded-xl px-4 py-2 mb-4 text-center">

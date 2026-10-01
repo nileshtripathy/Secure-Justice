@@ -2,63 +2,47 @@ const express = require('express');
 const router = express.Router();
 const { protect } = require('../middleware/authMiddleware');
 const Message = require('../models/Message');
-const FIR = require('../models/FIR');
+const { loadAccessibleFIR } = require('../utils/access');
+const { notify, firRecipients } = require('../utils/notify');
+const { cleanString } = require('../utils/validate');
+const { logError } = require('../utils/logger');
 
 // GET messages for a FIR
 router.get('/fir/:firId', protect, async (req, res) => {
   try {
-    const messages = await Message.find({ firId: req.params.firId })
-      .populate('sender', 'name role')
-      .sort('createdAt');
-    res.json(messages);
+    const fir = await loadAccessibleFIR(req.user, req.params.firId);
+    if (!fir) return res.status(404).json({ message: 'FIR not found' });
+    const messages = await Message.find({ firId: fir._id }).populate('sender', 'name role').sort('createdAt');
+    return res.json(messages);
   } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
+    logError('messages:get', err);
+    return res.status(500).json({ message: 'Server error' });
   }
 });
 
 // POST send a message on a FIR
 router.post('/fir/:firId', protect, async (req, res) => {
   try {
-    const { content } = req.body;
-    if (!content?.trim()) return res.status(400).json({ message: 'Message cannot be empty' });
+    const content = cleanString(req.body.content, 2000);
+    if (!content) return res.status(400).json({ message: 'Message cannot be empty' });
 
-    const msg = await Message.create({
-      firId: req.params.firId,
-      sender: req.user.id,
-      content: content.trim(),
-    });
+    const fir = await loadAccessibleFIR(req.user, req.params.firId);
+    if (!fir) return res.status(404).json({ message: 'FIR not found' });
 
+    const msg = await Message.create({ firId: fir._id, sender: req.user.id, content });
     await msg.populate('sender', 'name role');
 
-    // Socket.io Real-time Emission
     const io = req.app.get('io');
-    if (io) {
-      io.to(`fir_${req.params.firId}`).emit('new-message', msg);
-      
-      const fir = await FIR.findById(req.params.firId);
-      if (fir) {
-        if (fir.userId && fir.userId.toString() !== req.user.id) {
-          io.to(fir.userId.toString()).emit('global-notification', {
-            type: 'message',
-            title: 'New Message',
-            body: `You received a new message on case ${fir.caseNumber || 'Unknown'}`,
-            firId: fir._id
-          });
-        }
-        if (fir.assignedPoliceId && fir.assignedPoliceId.toString() !== req.user.id) {
-          io.to(fir.assignedPoliceId.toString()).emit('global-notification', {
-            type: 'message',
-            title: 'New Message',
-            body: `New message on case ${fir.caseNumber || 'Unknown'}`,
-            firId: fir._id
-          });
-        }
-      }
-    }
+    if (io) io.to(`fir_${fir._id}`).emit('new-message', msg);
+    await notify(io, {
+      recipients: firRecipients(fir), actorId: req.user.id, firId: fir._id,
+      title: 'New Message', message: `New message on case ${fir.caseNumber || 'Unknown'}`, type: 'message',
+    });
 
-    res.status(201).json(msg);
+    return res.status(201).json(msg);
   } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
+    logError('messages:post', err);
+    return res.status(500).json({ message: 'Server error' });
   }
 });
 

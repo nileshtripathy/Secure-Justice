@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Shield, Mail, Lock, Eye, EyeOff, ArrowLeft, CheckCircle, KeyRound } from 'lucide-react';
 import api from '../api/axios';
+import { PASSWORD_RULES } from '../constants/status';
 
 const STEPS = { EMAIL: 'email', RESET: 'reset', DONE: 'done' };
 
@@ -10,6 +11,8 @@ const ForgotPassword = () => {
 
   const [step, setStep] = useState(STEPS.EMAIL);
   const [email, setEmail] = useState('');
+  const [otp, setOtp] = useState('');
+  const [info, setInfo] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNew, setShowNew] = useState(false);
@@ -23,10 +26,13 @@ const ForgotPassword = () => {
     setError('');
     setLoading(true);
     try {
-      await api.post('/auth/forgot-password/verify-email', { email });
+      const res = await api.post('/auth/forgot-password/verify-email', { email });
+      setInfo(res.data.devMode
+        ? 'Dev mode: the OTP was printed in the backend console.'
+        : 'If this email is registered, a 6-digit code has been sent. It expires in 5 minutes.');
       setStep(STEPS.RESET);
     } catch (err) {
-      setError(err.response?.data?.message || 'Email not found. Please check and try again.');
+      setError(err.response?.data?.message || 'Could not send the code. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -37,8 +43,11 @@ const ForgotPassword = () => {
     e.preventDefault();
     setError('');
 
-    if (newPassword.length < 6) {
-      return setError('Password must be at least 6 characters.');
+    if (!/^\d{6}$/.test(otp)) {
+      return setError('Enter the 6-digit code from your email.');
+    }
+    if (!PASSWORD_RULES(newPassword).every((r) => r.ok)) {
+      return setError('Password must be at least 8 characters and contain a letter and a number.');
     }
     if (newPassword !== confirmPassword) {
       return setError('Passwords do not match.');
@@ -46,7 +55,7 @@ const ForgotPassword = () => {
 
     setLoading(true);
     try {
-      await api.post('/auth/reset-password', { email, newPassword });
+      await api.post('/auth/reset-password', { email, otp, newPassword });
       setStep(STEPS.DONE);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to reset password. Please try again.');
@@ -89,7 +98,7 @@ const ForgotPassword = () => {
           </div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-white">Reset Password</h2>
           <p className="mt-2 text-center text-sm text-gray-400">
-            {step === STEPS.EMAIL && 'Enter your registered email to get started'}
+            {step === STEPS.EMAIL && 'Enter your registered email to receive a code'}
             {step === STEPS.RESET && 'Choose a strong new password'}
             {step === STEPS.DONE && 'Your password has been updated!'}
           </p>
@@ -98,9 +107,9 @@ const ForgotPassword = () => {
         {/* Step indicator */}
         {step !== STEPS.DONE && (
           <div className="flex items-center justify-center gap-4">
-            <StepIndicator num="1" label="Verify Email" active={step === STEPS.EMAIL} done={step === STEPS.RESET} />
+            <StepIndicator num="1" label="Get Code" active={step === STEPS.EMAIL} done={step === STEPS.RESET} />
             <div className={`h-px flex-1 max-w-[60px] ${step === STEPS.RESET ? 'bg-primary-500' : 'bg-gray-700'}`} />
-            <StepIndicator num="2" label="New Password" active={step === STEPS.RESET} done={false} />
+            <StepIndicator num="2" label="Reset" active={step === STEPS.RESET} done={false} />
           </div>
         )}
 
@@ -164,6 +173,27 @@ const ForgotPassword = () => {
               />
             </div>
 
+            {info && <div className="p-3 bg-blue-900/20 border border-blue-500/30 rounded text-blue-200 text-xs text-center">{info}</div>}
+
+            {/* OTP */}
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <KeyRound className="h-5 w-5 text-gray-500" />
+              </div>
+              <input
+                id="reset-otp"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                required
+                className={`${inputClass} tracking-[0.4em] font-mono`}
+                placeholder="6-digit code"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+              />
+            </div>
+
             {/* New password */}
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -174,7 +204,7 @@ const ForgotPassword = () => {
                 type={showNew ? 'text' : 'password'}
                 required
                 className={`${inputClass} pr-10`}
-                placeholder="New password (min. 6 characters)"
+                placeholder="New password (min. 8 characters)"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
               />
@@ -213,11 +243,7 @@ const ForgotPassword = () => {
             {/* Password strength hint */}
             {newPassword && (
               <div className="space-y-1">
-                {[
-                  { label: 'At least 6 characters', ok: newPassword.length >= 6 },
-                  { label: 'Contains a number', ok: /\d/.test(newPassword) },
-                  { label: 'Contains a letter', ok: /[a-zA-Z]/.test(newPassword) },
-                ].map(({ label, ok }) => (
+                {PASSWORD_RULES(newPassword).map(({ label, ok }) => (
                   <div key={label} className="flex items-center gap-2 text-xs">
                     <div className={`w-1.5 h-1.5 rounded-full ${ok ? 'bg-green-400' : 'bg-gray-600'}`} />
                     <span className={ok ? 'text-green-400' : 'text-gray-500'}>{label}</span>

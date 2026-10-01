@@ -29,5 +29,6 @@ out/
 Thumbs.db
 
 # Project specific
-backend/uploads/
+backend/uploads/*
+!backend/uploads/.gitkeep
 frontend/dist/

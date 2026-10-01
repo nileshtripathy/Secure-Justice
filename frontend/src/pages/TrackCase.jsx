@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
 import api from '../api/axios';
-import { Search, Clock, CheckCircle, ShieldAlert, MapPin, Calendar, FileText } from 'lucide-react';
+import { Search, CheckCircle, ShieldAlert, Calendar, FileText } from 'lucide-react';
 
 const statusConfig = {
   pending:      { label: 'Pending Review',   color: 'text-yellow-400', bg: 'bg-yellow-900/30', border: 'border-yellow-500/30', dot: 'bg-yellow-400' },
   verified:     { label: 'Verified',         color: 'text-blue-400',   bg: 'bg-blue-900/30',   border: 'border-blue-500/30',   dot: 'bg-blue-400'   },
-  investigating:{ label: 'Under Investigation', color: 'text-purple-400',color: 'text-purple-400', bg: 'bg-purple-900/30', border: 'border-purple-500/30', dot: 'bg-purple-400' },
+  investigating:{ label: 'Under Investigation', color: 'text-purple-400', bg: 'bg-purple-900/30', border: 'border-purple-500/30', dot: 'bg-purple-400' },
+  forensic_review: { label: 'Forensic Review', color: 'text-cyan-400',  bg: 'bg-cyan-900/30',   border: 'border-cyan-500/30',   dot: 'bg-cyan-400'   },
+  legal_review: { label: 'Legal Review',     color: 'text-amber-400',  bg: 'bg-amber-900/30',  border: 'border-amber-500/30',  dot: 'bg-amber-400'  },
   closed:       { label: 'Case Closed',      color: 'text-green-400',  bg: 'bg-green-900/30',  border: 'border-green-500/30',  dot: 'bg-green-400'  },
 };
 
-const steps = ['pending', 'verified', 'investigating', 'closed'];
+const steps = ['pending', 'verified', 'investigating', 'forensic_review', 'legal_review', 'closed'];
 
 const TrackCase = () => {
   const [caseId, setCaseId] = useState('');
@@ -26,20 +28,14 @@ const TrackCase = () => {
     setLoading(true);
 
     try {
-      // Step 1: fetch the FIR (supports both caseNumber and _id)
-      const firRes = await api.get(`/fir/${caseId.trim()}`);
-      const fir = firRes.data;
-      setResult(fir);
-
-      // Step 2: fetch caselogs using the real MongoDB _id
-      try {
-        const logRes = await api.get(`/caselogs/${fir._id}`);
-        setLogs(logRes.data);
-      } catch {
-        setLogs([]); // logs are optional, don't fail the whole page
-      }
+      // Public endpoint: needs no login and returns only non-sensitive fields + the activity timeline
+      const res = await api.get(`/fir/track/${encodeURIComponent(caseId.trim().toUpperCase())}`);
+      setResult(res.data);
+      setLogs(res.data.logs || []);
     } catch (err) {
-      setError('Case not found. Please double-check the Case Number (e.g. FIR-2026-00001) and try again.');
+      setError(err.response?.status === 429
+        ? 'Too many searches. Please wait a few minutes and try again.'
+        : 'Case not found. Please double-check the Case Number (e.g. FIR-2026-12345678) and try again.');
     } finally {
       setLoading(false);
     }
@@ -58,7 +54,7 @@ const TrackCase = () => {
             <Search className="h-8 w-8 text-primary-400" />
           </div>
           <h1 className="text-3xl font-extrabold text-white mb-2">Track Your Case</h1>
-          <p className="text-gray-400">Enter your <span className="text-primary-400 font-mono">Case Number</span> (e.g. <span className="font-mono bg-gray-800 text-white px-2 py-0.5 rounded">FIR-2026-00001</span>) to get a live status update.</p>
+          <p className="text-gray-400">Enter your <span className="text-primary-400 font-mono">Case Number</span> (e.g. <span className="font-mono bg-gray-800 text-white px-2 py-0.5 rounded">FIR-2026-12345678</span>) to get a live status update.</p>
         </div>
 
         {/* Search Form */}
@@ -68,7 +64,7 @@ const TrackCase = () => {
             required
             value={caseId}
             onChange={e => setCaseId(e.target.value)}
-            placeholder="e.g. FIR-2026-00001"
+            placeholder="e.g. FIR-2026-12345678"
             className="flex-1 px-4 py-3 bg-gray-800/60 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 transition-colors font-mono text-sm"
           />
           <button
@@ -88,14 +84,14 @@ const TrackCase = () => {
         )}
 
         {result && cfg && (
-          <div className="space-y-6 animate-fadeIn">
+          <div className="space-y-6">
 
             {/* Status Card */}
             <div className="glass-panel p-6 rounded-2xl">
               <div className="flex justify-between items-start mb-4">
                 <div>
-                  <span className="text-xs text-gray-500 font-mono">Case ID</span>
-                  <p className="text-white font-mono text-sm">{result._id}</p>
+                  <span className="text-xs text-gray-500 font-mono">Case Number</span>
+                  <p className="text-white font-mono text-sm">{result.caseNumber}</p>
                 </div>
                 <div className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold ${cfg.bg} ${cfg.color} border ${cfg.border}`}>
                   <span className={`w-2 h-2 rounded-full ${cfg.dot} animate-pulse`}></span>
@@ -105,12 +101,9 @@ const TrackCase = () => {
 
               <h2 className="text-xl font-bold text-white mb-1">{result.crimeType} Complaint</h2>
               <div className="flex flex-wrap gap-4 text-sm text-gray-400 mb-4">
-                <span className="flex items-center gap-1"><MapPin className="h-4 w-4" /> {result.location}</span>
-                <span className="flex items-center gap-1"><Calendar className="h-4 w-4" /> {new Date(result.date).toLocaleDateString()}</span>
+                <span className="flex items-center gap-1"><Calendar className="h-4 w-4" /> Filed {new Date(result.date).toLocaleDateString()}</span>
               </div>
-              <div className="bg-gray-800/40 rounded-xl p-4 border border-gray-700/40 text-gray-300 text-sm leading-relaxed line-clamp-3">
-                {result.complaintText}
-              </div>
+              <p className="text-xs text-gray-500">Complaint details are private to the people involved in the case.</p>
             </div>
 
             {/* Progress Stepper */}
@@ -121,7 +114,7 @@ const TrackCase = () => {
                 <div className="absolute left-0 right-0 h-0.5 bg-gray-700 top-5 z-0"></div>
                 <div
                   className="absolute left-0 h-0.5 bg-primary-500 top-5 z-0 transition-all duration-700"
-                  style={{ width: `${(currentStepIndex / (steps.length - 1)) * 100}%` }}
+                  style={{ width: `${(Math.max(currentStepIndex, 0) / (steps.length - 1)) * 100}%` }}
                 ></div>
                 {steps.map((step, i) => {
                   const done = i <= currentStepIndex;
@@ -162,8 +155,6 @@ const TrackCase = () => {
                       <div>
                         <p className="text-white font-medium text-sm">{log.action}</p>
                         <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-                          <span>{log.performedBy?.name} <span className="text-gray-600">({log.performedBy?.role})</span></span>
-                          <span>•</span>
                           <span>{new Date(log.timestamp).toLocaleString()}</span>
                         </div>
                       </div>
