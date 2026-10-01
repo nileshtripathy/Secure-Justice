@@ -1,5 +1,5 @@
 import React, { useState, useContext } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { Shield, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 
@@ -8,16 +8,24 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const { login } = useContext(AuthContext);
   const navigate = useNavigate();
+  const location = useLocation();
+  const notice = location.state?.notice;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+    setLoading(true);
     try {
       await login(email, password);
-      navigate('/dashboard');
-    } catch {
-      setError('Invalid email or password');
+      navigate(location.state?.from?.pathname || '/dashboard', { replace: true });
+    } catch (err) {
+      // Show the server's reason (e.g. "awaiting admin approval"), not a blanket message
+      setError(err.response?.data?.message || 'Could not sign in. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -36,6 +44,7 @@ const Login = () => {
           </p>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          {notice && <div className="p-3 bg-green-900/30 border border-green-500/50 rounded text-green-200 text-sm text-center">{notice}</div>}
           {error && <div className="p-3 bg-red-900/30 border border-red-500/50 rounded text-red-200 text-sm text-center">{error}</div>}
           <div className="rounded-md shadow-sm space-y-4">
             {/* Email */}
@@ -93,9 +102,10 @@ const Login = () => {
           <div>
             <button
               type="submit"
-              className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-all shadow-lg shadow-primary-600/20"
+              disabled={loading}
+              className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-all shadow-lg shadow-primary-600/20 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              Sign in
+              {loading ? 'Signing in…' : 'Sign in'}
             </button>
           </div>
           <p className="text-center text-sm text-gray-400">

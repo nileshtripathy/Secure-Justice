@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { UserPlus, Mail, Lock, User, Eye, EyeOff, ShieldCheck, RefreshCw, CheckCircle } from 'lucide-react';
 import api from '../api/axios';
+import { PASSWORD_RULES } from '../constants/status';
 
 // ─── Step indicator ────────────────────────────────────────────────────────────
 const StepIndicator = ({ step }) => (
@@ -82,7 +83,7 @@ const OtpInput = ({ value, onChange }) => {
 
 // ─── Countdown timer ───────────────────────────────────────────────────────────
 const useCountdown = (seconds) => {
-  const [remaining, setRemaining] = useState(seconds);
+  const [remaining, setRemaining] = useState(0); // idle until an OTP is sent
   const intervalRef = useRef(null);
 
   const start = () => {
@@ -96,7 +97,7 @@ const useCountdown = (seconds) => {
     }, 1000);
   };
 
-  useEffect(() => { start(); return () => clearInterval(intervalRef.current); }, []);
+  useEffect(() => () => clearInterval(intervalRef.current), []);
 
   const mm = String(Math.floor(remaining / 60)).padStart(2, '0');
   const ss = String(remaining % 60).padStart(2, '0');
@@ -125,15 +126,11 @@ const Register = () => {
   // Countdown always mounted at top level (hooks must not be called conditionally)
   const { display: countdownDisplay, expired: otpExpired, restart: restartCountdown } = useCountdown(300);
 
-  const { login } = useContext(AuthContext);
+  const { setSession } = useContext(AuthContext);
   const navigate = useNavigate();
 
   /* Password strength */
-  const hints = [
-    { label: 'At least 6 characters', ok: password.length >= 6 },
-    { label: 'Contains a number', ok: /\d/.test(password) },
-    { label: 'Contains a letter', ok: /[a-zA-Z]/.test(password) },
-  ];
+  const hints = PASSWORD_RULES(password);
   const strength = hints.filter((h) => h.ok).length;
   const strengthLabel = ['', 'Weak', 'Fair', 'Strong'][strength];
   const strengthColor = ['', '#ef4444', '#eab308', '#22c55e'][strength];
@@ -143,6 +140,10 @@ const Register = () => {
     e.preventDefault();
     if (['police', 'forensic', 'lawyer'].includes(role) && !idCardFile) {
       setError('Please upload your ID Card / Badge.');
+      return;
+    }
+    if (strength < 3) {
+      setError('Password must be at least 8 characters and contain a letter and a number.');
       return;
     }
     setError('');
@@ -158,6 +159,7 @@ const Register = () => {
       }
 
       const res = await api.post('/auth/send-otp', formData);
+      restartCountdown(); // OTP lifetime starts now
       if (res.data.devMode) {
         setSuccessMsg('⚙️ Dev Mode: OTP printed to the backend console (terminal). Enter it below.');
       } else {
@@ -179,11 +181,13 @@ const Register = () => {
     setLoading(true);
     try {
       const res = await api.post('/auth/verify-otp', { email, otp });
-      // Store token & set user via a silent login reuse
-      localStorage.setItem('token', res.data.token);
-      // Trigger auth context re-fetch by navigating (profile fetched on load)
+      if (res.data.pendingApproval) {
+        // Police / forensic / lawyer accounts must be approved by an admin first
+        navigate('/login', { state: { notice: res.data.message } });
+        return;
+      }
+      setSession(res.data); // stores the token and signs the user in, no page reload needed
       navigate('/dashboard');
-      window.location.reload();
     } catch (err) {
       setError(err.response?.data?.message || 'Invalid or expired OTP.');
     } finally {
@@ -295,8 +299,13 @@ const Register = () => {
           <option value="police">Police Authority</option>
           <option value="forensic">Forensic Expert</option>
           <option value="lawyer">Lawyer</option>
-          <option value="admin">Admin</option>
         </select>
+
+        {['police', 'forensic', 'lawyer'].includes(role) && (
+          <p className="text-xs text-gray-500">
+            Staff accounts are reviewed by an administrator before you can sign in.
+          </p>
+        )}
 
         {['police', 'forensic', 'lawyer'].includes(role) && (
           <div className="space-y-1">

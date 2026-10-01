@@ -2,6 +2,7 @@ import React, { useContext, useEffect, useState } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import { statusPill, statusLabel } from '../constants/status';
 import { User, Mail, Shield, Calendar, FileText, Activity, LogOut, CheckCircle, Clock } from 'lucide-react';
 
 const roleColors = {
@@ -20,7 +21,7 @@ const Profile = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) { navigate('/login'); return; }
+    if (!user) return; // the route is guarded by ProtectedRoute
     api.get('/fir').then(res => setFirs(res.data)).catch(console.error).finally(() => setLoading(false));
   }, [user]);
 
@@ -32,7 +33,6 @@ const Profile = () => {
   const rc = roleColors[role] || roleColors.citizen;
 
   const pending = firs.filter(f => f.status === 'pending').length;
-  const active  = firs.filter(f => ['verified','investigating'].includes(f.status)).length;
   const closed  = firs.filter(f => f.status === 'closed').length;
 
   return (
@@ -92,7 +92,7 @@ const Profile = () => {
           {/* Recent Cases */}
           <div className="glass-panel p-6 rounded-2xl">
             <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-              <FileText className="h-5 w-5 text-primary-400" /> My Recent Cases
+              <FileText className="h-5 w-5 text-primary-400" /> {user.role === 'citizen' ? 'My Recent Cases' : 'Recent Cases'}
             </h3>
             {loading ? (
               <p className="text-gray-400 text-sm text-center py-4">Loading...</p>
@@ -110,12 +110,7 @@ const Profile = () => {
                       <p className="text-white text-sm font-medium truncate group-hover:text-primary-300 transition-colors">{fir.complaintText}</p>
                       <p className="text-gray-500 text-xs mt-0.5">{fir.crimeType} · {fir.location}</p>
                     </div>
-                    <span className={`ml-4 shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full capitalize ${
-                      fir.status === 'pending'       ? 'bg-yellow-900/30 text-yellow-400 border border-yellow-500/30' :
-                      fir.status === 'verified'      ? 'bg-blue-900/30 text-blue-400 border border-blue-500/30' :
-                      fir.status === 'investigating' ? 'bg-purple-900/30 text-purple-400 border border-purple-500/30' :
-                                                       'bg-green-900/30 text-green-400 border border-green-500/30'
-                    }`}>{fir.status}</span>
+                    <span className={`ml-4 shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full ${statusPill(fir.status)}`}>{statusLabel(fir.status)}</span>
                   </button>
                 ))}
               </div>

@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import api from '../api/axios';
+import { openEvidenceFile } from '../utils/useAuthedFile';
+import { statusPill, statusLabel, STATUS_META, STATUS_PERMISSIONS } from '../constants/status';
 import { Shield, FileText, Clock, CheckCircle, Upload, ArrowLeft, ShieldAlert, Printer, Copy, Hash, MessageSquare, Send, Gavel, EyeOff } from 'lucide-react';
 
 const FirDetails = () => {
@@ -34,6 +36,8 @@ const FirDetails = () => {
 
   // Judgment
   const [judgmentText, setJudgmentText] = useState('');
+  const [judgmentError, setJudgmentError] = useState('');
+  const [actionError, setActionError] = useState('');
 
   const copyCase = () => {
     const num = fir?.caseNumber;
@@ -86,26 +90,33 @@ const FirDetails = () => {
   }, [id]);
 
   useEffect(() => {
-    if (socket && id) {
-      socket.emit('join-fir', id);
+    const firId = fir?._id; // the URL may contain a case number, rooms are keyed by the real _id
+    if (!socket || !firId) return undefined;
 
-      const handleNewMessage = (msg) => {
-        setMessages((prev) => [...prev, msg]);
-      };
+    const join = () => socket.emit('join-fir', firId);
+    join();
+    socket.on('connect', join); // rooms are lost on reconnect, so join again
 
-      const handleNewEvidence = (ev) => {
-        setEvidence((prev) => [...prev, ev]);
-      };
+    // The sender also receives the broadcast, so ignore items we already have
+    const upsert = (setter) => (item) =>
+      setter((prev) => (prev.some((x) => x._id === item._id) ? prev : [...prev, item]));
+    const handleNewMessage = upsert(setMessages);
+    const handleNewEvidence = upsert(setEvidence);
+    const handleFirUpdated = () => fetchData();
 
-      socket.on('new-message', handleNewMessage);
-      socket.on('new-evidence', handleNewEvidence);
+    socket.on('new-message', handleNewMessage);
+    socket.on('new-evidence', handleNewEvidence);
+    socket.on('fir-updated', handleFirUpdated);
 
-      return () => {
-        socket.off('new-message', handleNewMessage);
-        socket.off('new-evidence', handleNewEvidence);
-      };
-    }
-  }, [socket, id]);
+    return () => {
+      socket.off('connect', join);
+      socket.off('new-message', handleNewMessage);
+      socket.off('new-evidence', handleNewEvidence);
+      socket.off('fir-updated', handleFirUpdated);
+      socket.emit('leave-fir', firId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket, fir?._id]);
 
   const handleUpload = async (e) => {
     e.preventDefault();
@@ -119,11 +130,7 @@ const FirDetails = () => {
     formData.append('description', description);
 
     try {
-      await api.post('/evidence/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      });
+      await api.post('/evidence/upload', formData); // axios sets the multipart boundary itself
       setFile(null);
       setDescription('');
       fetchData();
@@ -132,6 +139,25 @@ const FirDetails = () => {
       console.error(err);
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleAssignToMe = async () => {
+    setActionError('');
+    try {
+      await api.put(`/fir/${id}`, { assignedPoliceId: 'me' });
+      fetchData();
+    } catch (err) {
+      setActionError(err?.response?.data?.message || 'Failed to assign the case.');
+    }
+  };
+
+  const handleViewFile = async (evidenceId) => {
+    setActionError('');
+    try {
+      await openEvidenceFile(evidenceId);
+    } catch {
+      setActionError('Could not open the file.');
     }
   };
 
@@ -152,7 +178,7 @@ const FirDetails = () => {
     setSendingMsg(true);
     try {
       const res = await api.post(`/messages/fir/${id}`, { content: msgText });
-      setMessages(prev => [...prev, res.data]);
+      setMessages(prev => (prev.some(m => m._id === res.data._id) ? prev : [...prev, res.data]));
       setMsgText('');
     } catch (err) {
       console.error(err);
@@ -163,11 +189,12 @@ const FirDetails = () => {
 
   const handleSubmitJudgment = async () => {
     if (!judgmentText.trim()) return;
+    setJudgmentError('');
     try {
-      await api.put(`/fir/${id}`, { judgment: judgmentText, status: 'closed' });
+      await api.put(`/fir/${id}`, { judgment: judgmentText });
       fetchData();
     } catch (err) {
-      console.error(err);
+      setJudgmentError(err?.response?.data?.message || 'Failed to record the judgment.');
     }
   };
 
@@ -175,19 +202,28 @@ const FirDetails = () => {
     try {
       const res = await api.get(`/evidence/verify/${evidenceId}`);
       setVerificationResult({
-        success: true,
+        success: res.data.verified,
         message: res.data.message,
-        hash: res.data.originalHash
+        hash: res.data.originalHash,
+        currentHash: res.data.currentHash,
       });
+      fetchData(); // the check is written to the audit trail
+
     } catch (err) {
       console.error(err);
       setVerificationResult({
         success: false,
-        message: "Verification failed. Could not confirm evidence integrity.",
-        hash: null
+        message: err?.response?.data?.message || "Verification failed. Could not confirm evidence integrity.",
+        hash: null,
+        currentHash: null,
       });
     }
   };
+
+  const allowedStatuses = STATUS_PERMISSIONS[user?.role] || [];
+  const canChangeStatus = allowedStatuses.length > 0 && (fir?.status !== 'closed' || user?.role === 'admin');
+  // always include the current status so the select shows it, even if this role cannot set it
+  const statusOptions = [...new Set([fir?.status, ...allowedStatuses])].filter(Boolean);
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-[60vh]">
@@ -243,14 +279,9 @@ const FirDetails = () => {
                 <p className="text-gray-400 text-sm">Filed on {new Date(fir.date).toLocaleDateString()} at {new Date(fir.date).toLocaleTimeString()}</p>
               </div>
               <div className="text-right space-y-2">
-                <div className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold ${
-                  fir.status === 'pending' ? 'bg-yellow-900/30 text-yellow-500 border border-yellow-500/30' :
-                  fir.status === 'verified' ? 'bg-blue-900/30 text-blue-500 border border-blue-500/30' :
-                  fir.status === 'investigating' ? 'bg-purple-900/30 text-purple-500 border border-purple-500/30' :
-                  'bg-green-900/30 text-green-500 border border-green-500/30'
-                }`}>
+                <div className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold ${statusPill(fir.status)}`}>
                   {fir.status === 'pending' ? <Clock className="h-4 w-4" /> : <CheckCircle className="h-4 w-4"/>}
-                  <span className="capitalize">{fir.status}</span>
+                  <span>{statusLabel(fir.status)}</span>
                 </div>
               </div>
             </div>
@@ -285,6 +316,10 @@ const FirDetails = () => {
                 <span className="text-white font-medium">{fir.location}</span>
               </div>
               <div>
+                <span className="text-gray-500 block mb-1">Assigned Officer</span>
+                <span className="text-white font-medium">{fir.assignedPoliceId?.name || 'Not assigned yet'}</span>
+              </div>
+              <div>
                 <span className="text-gray-500 block mb-1">Complainant</span>
                 <span className="text-white font-medium">
                   {fir.isAnonymous ? (
@@ -306,6 +341,7 @@ const FirDetails = () => {
               Digital Evidence
             </h2>
 
+            {actionError && <div className="text-red-400 text-sm mb-3">{actionError}</div>}
             {evidence.length === 0 ? (
               <p className="text-gray-400 text-center py-4">No evidence uploaded yet.</p>
             ) : (
@@ -317,9 +353,9 @@ const FirDetails = () => {
                       <p className="text-xs text-gray-500 font-mono truncate w-full max-w-xs sm:max-w-md">Hash: {ev.fileHash}</p>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
-                      <a href={`${api.defaults.baseURL.replace('/api', '')}${ev.fileUrl}`} target="_blank" rel="noopener noreferrer" className="text-sm bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded transition-colors">
+                      <button onClick={() => handleViewFile(ev._id)} className="text-sm bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded transition-colors">
                         View File
-                      </a>
+                      </button>
                       {['forensic', 'judge', 'police', 'admin'].includes(user?.role) && (
                         <button onClick={() => handleVerify(ev._id)} className="text-sm bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30 px-3 py-1.5 rounded transition-colors">
                           Verify
@@ -362,19 +398,16 @@ const FirDetails = () => {
         </div>
 
         <div className="space-y-6 print:hidden">
-          {user?.role !== 'citizen' && (
+          {canChangeStatus && (
             <div className="glass-panel p-6 rounded-2xl">
               <h3 className="text-lg font-bold text-white mb-4">Update Status</h3>
               <select 
                 value={newStatus} onChange={e => setNewStatus(e.target.value)}
                 className="w-full bg-gray-800/50 border border-gray-700 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-primary-500 mb-4"
               >
-                <option value="pending">Pending</option>
-                <option value="verified">Verified</option>
-                <option value="investigating">Investigating</option>
-                <option value="forensic_review">Forensic Review</option>
-                <option value="legal_review">Legal Review</option>
-                <option value="closed">Closed</option>
+                {statusOptions.map((value) => (
+                  <option key={value} value={value}>{STATUS_META[value].label}</option>
+                ))}
               </select>
               {statusError && <div className="text-red-400 text-sm mb-3 text-center">{statusError}</div>}
               <button 
@@ -384,6 +417,14 @@ const FirDetails = () => {
               >
                 Update Status
               </button>
+              {user?.role === 'police' && !fir.assignedPoliceId && fir.status !== 'closed' && (
+                <button
+                  onClick={handleAssignToMe}
+                  className="w-full mt-3 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white py-2 rounded-lg font-medium transition-colors"
+                >
+                  Assign this case to me
+                </button>
+              )}
             </div>
           )}
 
@@ -489,6 +530,7 @@ const FirDetails = () => {
                   >
                     Submit & Close Case
                   </button>
+                  {judgmentError && <div className="text-red-400 text-sm text-center">{judgmentError}</div>}
                 </div>
               )}
             </div>
@@ -534,8 +576,14 @@ const FirDetails = () => {
             
             {verificationResult.hash && (
               <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700/50">
-                <p className="text-sm text-gray-500 mb-1">SHA256 Checksum (Original)</p>
+                <p className="text-sm text-gray-500 mb-1">SHA-256 recorded at upload</p>
                 <p className="text-sm text-white font-mono break-all">{verificationResult.hash}</p>
+                {verificationResult.currentHash && (
+                  <>
+                    <p className="text-sm text-gray-500 mt-3 mb-1">SHA-256 of the file now</p>
+                    <p className={`text-sm font-mono break-all ${verificationResult.success ? 'text-green-400' : 'text-red-400'}`}>{verificationResult.currentHash}</p>
+                  </>
+                )}
               </div>
             )}
             

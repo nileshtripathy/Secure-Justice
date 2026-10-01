@@ -1,10 +1,10 @@
 const mongoose = require('mongoose');
 
 const messageSchema = new mongoose.Schema({
-  firId:    { type: mongoose.Schema.Types.ObjectId, ref: 'FIR', required: true },
+  firId:    { type: mongoose.Schema.Types.ObjectId, ref: 'FIR', required: true, index: true },
   sender:   { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   receiver: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // null = broadcast to case participants
-  content:  { type: String, required: true },
+  content:  { type: String, required: true, maxlength: 2000 },
   isSystemMessage: { type: Boolean, default: false },
   readBy:   [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
 }, { timestamps: true });

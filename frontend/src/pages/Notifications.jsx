@@ -19,7 +19,7 @@ const Notifications = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) { navigate('/login'); return; }
+    if (!user) return; // the route is guarded by ProtectedRoute
     api.get('/notifications')
       .then(res => setNotifications(res.data))
       .catch(console.error)
@@ -27,13 +27,21 @@ const Notifications = () => {
   }, [user]);
 
   const markAllRead = async () => {
-    await api.patch('/notifications/read-all');
-    setNotifications(n => n.map(x => ({ ...x, isRead: true })));
+    try {
+      await api.patch('/notifications/read-all');
+      setNotifications(n => n.map(x => ({ ...x, isRead: true })));
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const markRead = async (id) => {
-    await api.patch(`/notifications/${id}/read`);
-    setNotifications(n => n.map(x => x._id === id ? { ...x, isRead: true } : x));
+    try {
+      await api.patch(`/notifications/${id}/read`);
+      setNotifications(n => n.map(x => x._id === id ? { ...x, isRead: true } : x));
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleClick = async (notif) => {
